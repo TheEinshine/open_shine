@@ -74,6 +74,11 @@ var migrations = []string{
 )`,
 }
 
+// Close releases the underlying connection pool.
+func (s *Store) Close() error {
+	return s.db.Close()
+}
+
 // Migrate creates the schema. Safe to run on every boot.
 func (s *Store) Migrate() error {
 	for i, stmt := range migrations {
