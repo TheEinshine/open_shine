@@ -46,33 +46,48 @@ func Open() (*Store, error) {
 	return &Store{db: conn}, nil
 }
 
-// EnsureSchema creates the tables if they don't exist and seeds a default
-// settings row. defaultRecipient is used only on first run (when no row
-// exists yet) so the heartbeat works out of the box; change it later with SQL.
-func (s *Store) EnsureSchema(defaultRecipient string) error {
-	if _, err := s.db.Exec(`
-CREATE TABLE IF NOT EXISTS mail_settings (
+// migrations is the ordered list of structural statements. Each must be
+// idempotent (CREATE TABLE IF NOT EXISTS / ALTER ... IF NOT EXISTS) so running
+// Migrate repeatedly on every startup is always safe. Add new tables and
+// columns here as the app grows.
+var migrations = []string{
+	`CREATE TABLE IF NOT EXISTS users (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  name          VARCHAR(255) NOT NULL,
+  email         VARCHAR(255) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NULL,
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+)`,
+	`CREATE TABLE IF NOT EXISTS mail_settings (
   id            INT PRIMARY KEY,
   recipient     VARCHAR(255) NOT NULL,
   interval_mins INT NOT NULL DEFAULT 10,
   subject       VARCHAR(255) NOT NULL DEFAULT 'Open Shine heartbeat',
   enabled       BOOLEAN NOT NULL DEFAULT TRUE
-)`); err != nil {
-		return err
-	}
-
-	if _, err := s.db.Exec(`
-CREATE TABLE IF NOT EXISTS mail_log (
+)`,
+	`CREATE TABLE IF NOT EXISTS mail_log (
   id      INT AUTO_INCREMENT PRIMARY KEY,
   sent_at DATETIME NOT NULL,
   status  VARCHAR(20) NOT NULL,
   error   TEXT
-)`); err != nil {
-		return err
-	}
+)`,
+}
 
-	// Only inserts if id=1 doesn't already exist, so it never clobbers
-	// settings you've changed.
+// Migrate creates the schema. Safe to run on every boot.
+func (s *Store) Migrate() error {
+	for i, stmt := range migrations {
+		if _, err := s.db.Exec(stmt); err != nil {
+			return fmt.Errorf("migration %d failed: %w", i, err)
+		}
+	}
+	return nil
+}
+
+// Seed inserts default rows that the app needs to function. Each insert uses
+// INSERT IGNORE so it only writes when the row is absent — it never overwrites
+// values you've changed by hand.
+func (s *Store) Seed(defaultRecipient string) error {
 	_, err := s.db.Exec(
 		`INSERT IGNORE INTO mail_settings (id, recipient) VALUES (1, ?)`,
 		defaultRecipient,

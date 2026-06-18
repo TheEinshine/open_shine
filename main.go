@@ -35,10 +35,14 @@ func startMailLoop() {
 		log.Printf("mailer disabled: %v", err)
 		return
 	}
-	// Seed the default recipient with the sending account, so it emails you
-	// out of the box. Change it later: UPDATE mail_settings SET recipient=...
-	if err := store.EnsureSchema(smtpCfg.User); err != nil {
-		log.Printf("mailer disabled: schema setup failed: %v", err)
+
+	// Build the structure first, then seed default rows.
+	if err := store.Migrate(); err != nil {
+		log.Printf("mailer disabled: migrate failed: %v", err)
+		return
+	}
+	if err := store.Seed(smtpCfg.User); err != nil {
+		log.Printf("mailer disabled: seed failed: %v", err)
 		return
 	}
 
@@ -52,7 +56,6 @@ func startMailLoop() {
 			continue
 		}
 
-		// Guard against a bad value pinning the loop to a tight spin.
 		interval := s.IntervalMins
 		if interval < 1 {
 			interval = 10
