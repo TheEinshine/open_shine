@@ -1,6 +1,8 @@
 package mailer
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net/smtp"
 	"os"
@@ -50,22 +52,80 @@ func LoadConfig() (Config, error) {
 	return c, nil
 }
 
-// Send delivers a plain-text email to the given recipient via the relay.
-func (c Config) Send(to, subject, body string) error {
-	addr := c.Host + ":" + c.Port
-	auth := smtp.PlainAuth("", c.User, c.Pass, c.Host)
-	msg := buildMessage(c.From, to, subject, body)
-	return smtp.SendMail(addr, auth, c.From, []string{to}, msg)
+// Message is one outbound email. When HTML is non-empty the message is sent as
+// multipart/alternative (plain text + HTML); otherwise it is plain text only.
+type Message struct {
+	To      string
+	Subject string
+	Text    string
+	HTML    string
 }
 
-func buildMessage(from, to, subject, body string) []byte {
-	var sb strings.Builder
-	sb.WriteString("From: " + from + "\r\n")
-	sb.WriteString("To: " + to + "\r\n")
-	sb.WriteString("Subject: " + subject + "\r\n")
-	sb.WriteString("MIME-Version: 1.0\r\n")
-	sb.WriteString("Content-Type: text/plain; charset=\"utf-8\"\r\n")
-	sb.WriteString("\r\n")
-	sb.WriteString(body)
-	return []byte(sb.String())
+// Send delivers a plain-text email. Kept for callers that don't need HTML.
+func (c Config) Send(to, subject, body string) error {
+	return c.SendMessage(Message{To: to, Subject: subject, Text: body})
+}
+
+// SendMessage delivers m via the configured relay. Go's smtp DotWriter handles
+// CRLF line-ending conversion and dot-stuffing, so the body is built with plain
+// "\n" line endings.
+func (c Config) SendMessage(m Message) error {
+	addr := c.Host + ":" + c.Port
+	auth := smtp.PlainAuth("", c.User, c.Pass, c.Host)
+	raw, err := c.build(m)
+	if err != nil {
+		return err
+	}
+	return smtp.SendMail(addr, auth, c.From, []string{m.To}, raw)
+}
+
+func (c Config) build(m Message) ([]byte, error) {
+	var b strings.Builder
+	b.WriteString("From: " + sanitizeHeader(c.From) + "\r\n")
+	b.WriteString("To: " + sanitizeHeader(m.To) + "\r\n")
+	b.WriteString("Subject: " + sanitizeHeader(m.Subject) + "\r\n")
+	b.WriteString("MIME-Version: 1.0\r\n")
+
+	if m.HTML == "" {
+		b.WriteString("Content-Type: text/plain; charset=\"utf-8\"\r\n\r\n")
+		b.WriteString(m.Text)
+		return []byte(b.String()), nil
+	}
+
+	boundary, err := randomBoundary()
+	if err != nil {
+		return nil, err
+	}
+	b.WriteString("Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n\r\n")
+
+	// Plain-text part first (least-capable client wins the fallback).
+	text := m.Text
+	if text == "" {
+		text = "Open Shine heartbeat — enable HTML to view the report."
+	}
+	b.WriteString("--" + boundary + "\r\n")
+	b.WriteString("Content-Type: text/plain; charset=\"utf-8\"\r\n\r\n")
+	b.WriteString(text + "\r\n")
+
+	// HTML part.
+	b.WriteString("--" + boundary + "\r\n")
+	b.WriteString("Content-Type: text/html; charset=\"utf-8\"\r\n\r\n")
+	b.WriteString(m.HTML + "\r\n")
+
+	b.WriteString("--" + boundary + "--\r\n")
+	return []byte(b.String()), nil
+}
+
+func randomBoundary() (string, error) {
+	var buf [18]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "", err
+	}
+	return "openshine-" + hex.EncodeToString(buf[:]), nil
+}
+
+// sanitizeHeader strips CR/LF so DB-sourced values (subject, recipient) can't
+// inject extra headers.
+func sanitizeHeader(v string) string {
+	return strings.NewReplacer("\r", "", "\n", "").Replace(v)
 }

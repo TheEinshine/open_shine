@@ -17,6 +17,13 @@ type Settings struct {
 	Enabled      bool
 }
 
+// LogEntry is one row of mail_log, newest first when returned by RecentLogs.
+type LogEntry struct {
+	SentAt time.Time
+	Status string
+	Error  string
+}
+
 type Store struct {
 	db *sql.DB
 }
@@ -116,6 +123,28 @@ func (s *Store) LogSend(status, errMsg string) error {
 		time.Now(), status, nullable(errMsg),
 	)
 	return err
+}
+
+// RecentLogs returns up to limit most-recent mail_log rows, newest first.
+func (s *Store) RecentLogs(limit int) ([]LogEntry, error) {
+	rows, err := s.db.Query(
+		`SELECT sent_at, status, COALESCE(error, '') FROM mail_log ORDER BY id DESC LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []LogEntry
+	for rows.Next() {
+		var e LogEntry
+		if err := rows.Scan(&e.SentAt, &e.Status, &e.Error); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }
 
 func nullable(s string) interface{} {

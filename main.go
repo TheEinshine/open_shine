@@ -14,6 +14,8 @@ import (
 
 	"github.com/TheEinshine/open_shine/db"
 	"github.com/TheEinshine/open_shine/mailer"
+	"github.com/TheEinshine/open_shine/report"
+	"github.com/TheEinshine/open_shine/sysstat"
 )
 
 func main() {
@@ -123,10 +125,30 @@ func runMailLoop(ctx context.Context, store *db.Store, smtpCfg mailer.Config) {
 	}
 }
 
-// sendHeartbeat sends one heartbeat email and records the outcome.
+// sendHeartbeat gathers system + runtime metrics and recent send history,
+// renders them into an HTML report (with a plain-text fallback), emails it, and
+// records the outcome. The log stack reflects prior sends — this send is
+// recorded after it completes.
 func sendHeartbeat(store *db.Store, smtpCfg mailer.Config, s db.Settings) {
-	body := fmt.Sprintf("Open Shine is still running at %s", time.Now().Format(time.RFC1123))
-	if err := smtpCfg.Send(s.Recipient, s.Subject, body); err != nil {
+	stats := sysstat.Collect()
+	logs, err := store.RecentLogs(8)
+	if err != nil {
+		log.Printf("could not read mail_log for report: %v", err)
+		logs = nil
+	}
+
+	subject := s.Subject
+	if subject == "" {
+		subject = "Open Shine heartbeat"
+	}
+	msg := mailer.Message{
+		To:      s.Recipient,
+		Subject: subject,
+		Text:    report.RenderText(stats, logs),
+		HTML:    report.RenderHTML(stats, logs),
+	}
+
+	if err := smtpCfg.SendMessage(msg); err != nil {
 		log.Printf("email send failed: %v", err)
 		store.LogSend("error", err.Error())
 		return
