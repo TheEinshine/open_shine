@@ -179,7 +179,7 @@ func logRow(e db.LogEntry) string {
 
 	var b strings.Builder
 	b.WriteString(`<tr>`)
-	fmt.Fprintf(&b, `<td style="padding:5px 0;font-family:%s;font-size:12px;color:%s;white-space:nowrap;vertical-align:top;">%s</td>`, fontMono, colMuted, html.EscapeString(e.SentAt.Format("02 Jan 15:04")))
+	fmt.Fprintf(&b, `<td style="padding:5px 0;font-family:%s;font-size:12px;color:%s;white-space:nowrap;vertical-align:top;">%s</td>`, fontMono, colMuted, html.EscapeString(e.SentAt.Local().Format("02 Jan 15:04")))
 	fmt.Fprintf(&b, `<td style="padding:5px 12px;font-family:%s;font-size:12px;color:%s;white-space:nowrap;vertical-align:top;">%s</td>`, fontMono, color, html.EscapeString(strings.ToLower(e.Status)))
 	fmt.Fprintf(&b, `<td style="padding:5px 0;font-family:%s;font-size:12px;color:%s;vertical-align:top;word-break:break-all;">%s</td>`, fontMono, colMuted, html.EscapeString(msg))
 	b.WriteString(`</tr>`)
@@ -247,7 +247,9 @@ func RenderText(s sysstat.Stats, logs []db.LogEntry) string {
 	} else {
 		fmt.Fprintf(&b, "\nLOG STACK (last %d)\n", len(logs))
 		for _, e := range logs {
-			line := fmt.Sprintf("  %-13s %-6s", e.SentAt.Format("02 Jan 15:04"), strings.ToLower(e.Status))
+			// mail_log times come back from the driver in UTC; render in local
+			// time to match the local-zone header.
+			line := fmt.Sprintf("  %-13s %-6s", e.SentAt.Local().Format("02 Jan 15:04"), strings.ToLower(e.Status))
 			if e.Error != "" {
 				line += " " + e.Error
 			}

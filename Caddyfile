@@ -1,0 +1,30 @@
+# Open Shine — public TLS entry point.
+#
+# Caddy terminates HTTPS (auto Let's Encrypt), serves the built React SPA, and
+# reverse-proxies the API + health endpoints to the Go app on localhost:8080.
+# Replace the domain and the dist path, then: `sudo caddy run --config Caddyfile`
+# (or run it as a systemd service / `caddy reload`).
+
+shine.example.com {
+	encode gzip
+
+	# API and health check → Go app. Caddy adds X-Forwarded-For, which the app
+	# uses for login rate limiting, and terminates TLS so Secure cookies work.
+	@backend path /api/* /healthz
+	handle @backend {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	# Everything else → the built SPA, with client-side routing fallback.
+	handle {
+		root * /home/<user>/<workspace>/open_shine/web-front/dist
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		# Belt-and-suspenders; the app sets these too.
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+	}
+}

@@ -11,17 +11,17 @@ import (
 
 // Settings is the single configurable row in mail_settings (id = 1).
 type Settings struct {
-	Recipient    string
-	IntervalMins int
-	Subject      string
-	Enabled      bool
+	Recipient    string `json:"recipient"`
+	IntervalMins int    `json:"intervalMins"`
+	Subject      string `json:"subject"`
+	Enabled      bool   `json:"enabled"`
 }
 
 // LogEntry is one row of mail_log, newest first when returned by RecentLogs.
 type LogEntry struct {
-	SentAt time.Time
-	Status string
-	Error  string
+	SentAt time.Time `json:"sentAt"`
+	Status string    `json:"status"`
+	Error  string    `json:"error"`
 }
 
 type Store struct {
@@ -79,6 +79,48 @@ var migrations = []string{
   status  VARCHAR(20) NOT NULL,
   error   TEXT
 )`,
+	`CREATE TABLE IF NOT EXISTS sessions (
+  id         CHAR(64) PRIMARY KEY,
+  user_id    INT NOT NULL,
+  csrf_token CHAR(64) NOT NULL,
+  created_at DATETIME NOT NULL,
+  expires_at DATETIME NOT NULL,
+  INDEX idx_sessions_expires (expires_at),
+  CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+)`,
+	`CREATE TABLE IF NOT EXISTS thresholds (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  metric     VARCHAR(20) NOT NULL,          -- cpu | mem | disk | load1
+  op         VARCHAR(4)  NOT NULL,          -- gt | gte | lt | lte
+  value      DOUBLE      NOT NULL,
+  enabled    BOOLEAN     NOT NULL DEFAULT TRUE,
+  created_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP
+)`,
+	`CREATE TABLE IF NOT EXISTS targets (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  name       VARCHAR(100) NOT NULL,
+  kind       VARCHAR(10)  NOT NULL,         -- http | tcp
+  address    VARCHAR(255) NOT NULL,         -- URL for http, host:port for tcp
+  enabled    BOOLEAN      NOT NULL DEFAULT TRUE,
+  created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+)`,
+	`CREATE TABLE IF NOT EXISTS metric_history (
+  id      INT AUTO_INCREMENT PRIMARY KEY,
+  ts      DATETIME NOT NULL,
+  cpu     DOUBLE   NOT NULL,
+  mem     DOUBLE   NOT NULL,
+  disk    DOUBLE   NOT NULL,
+  load1   DOUBLE   NOT NULL,
+  INDEX idx_metric_history_ts (ts)
+)`,
+	`CREATE TABLE IF NOT EXISTS alert_log (
+  id       INT AUTO_INCREMENT PRIMARY KEY,
+  ts       DATETIME NOT NULL,
+  source   VARCHAR(100) NOT NULL,           -- e.g. threshold:cpu, target:api
+  state    VARCHAR(20)  NOT NULL,           -- breach | recovered
+  message  TEXT NOT NULL,
+  INDEX idx_alert_log_ts (ts)
+)`,
 }
 
 // Close releases the underlying connection pool.
@@ -114,6 +156,15 @@ func (s *Store) GetSettings() (Settings, error) {
 		`SELECT recipient, interval_mins, subject, enabled FROM mail_settings WHERE id = 1`,
 	).Scan(&out.Recipient, &out.IntervalMins, &out.Subject, &out.Enabled)
 	return out, err
+}
+
+// UpdateSettings overwrites the single mail_settings row (id = 1).
+func (s *Store) UpdateSettings(in Settings) error {
+	_, err := s.db.Exec(
+		`UPDATE mail_settings SET recipient = ?, interval_mins = ?, subject = ?, enabled = ? WHERE id = 1`,
+		in.Recipient, in.IntervalMins, in.Subject, in.Enabled,
+	)
+	return err
 }
 
 // LogSend records the outcome of a send attempt.

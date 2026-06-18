@@ -4,13 +4,20 @@ This document briefs a fresh AI session (or any reader) on the `open_shine` proj
 
 ## What this project is
 
-A small Go web service (`open_shine`) running on an always-on home Ubuntu laptop server. It serves a trivial HTTP endpoint and, in the background, emails a "heartbeat" **status report** on an interval — a dark-themed HTML table of host metrics (CPU, memory, storage, load, uptime), Go-runtime stats, and a "log stack" of recent send history. Email config (recipient, interval, subject, on/off) lives in MySQL; secrets live in environment variables. The repo auto-deploys to the server via a poll-based GitOps loop.
+A Go service (`open_shine`) running on an always-on home Ubuntu laptop server. It started as a heartbeat emailer and is now an **admin-configurable monitoring platform**:
+
+- **Heartbeat email** — a dark-themed HTML status report (CPU, memory, storage, load, uptime, Go-runtime stats, recent send history) on an interval.
+- **Monitoring engine** — samples metrics into history, evaluates DB-configured alert thresholds, health-checks external targets (http/tcp), and emails alerts on state transitions.
+- **JSON admin API + React SPA** — a login-protected admin UI (bcrypt + session cookies) to configure mail settings, thresholds, and targets, and to view a live dashboard + logs. Served publicly over TLS via Caddy.
+
+Config (mail settings, thresholds, targets) lives in MySQL; secrets live in environment variables. The Go backend auto-deploys via the poll-based GitOps loop; the SPA needs a separate build step (see Deployment). **See "Part II" below for the v2 architecture.**
 
 ## Infrastructure
 
 - **Repo:** `github.com/TheEinshine/open_shine` (public, GitHub)
 - **Go module:** `github.com/TheEinshine/open_shine`, `go 1.26`
-- **Dependency:** `github.com/go-sql-driver/mysql v1.10.0` (+ `filippo.io/edwards25519` indirect). `go.sum` must be committed.
+- **Go dependencies:** `github.com/go-sql-driver/mysql` + `golang.org/x/crypto` (bcrypt) — plus indirects. `go.sum` must be committed. No third-party deps for metrics (pure `/proc` + stdlib).
+- **Frontend toolchain:** Node + Vite/React/TS in `web-front/` (build only; not needed to run the Go backend). Caddy for public TLS.
 - **Server:** Ubuntu 24.04 laptop on the local network (acting as an always-on server).
 - **Repo path on server:** `/home/<user>/<workspace>/open_shine`
 - **Stack on server:** Tailscale (remote access), SSH, systemd, Air `v1.65.x` (hot-reload), Go, MySQL/MariaDB.
@@ -169,6 +176,86 @@ SMTP_PASS=<16-char Gmail App Password, NO spaces>
 - Harden DB credentials and MySQL bind address / grants.
 - Reliability: disable laptop suspend (`sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target`); set BIOS "Power On After AC Loss" for auto-recovery after an outage.
 - Consider whether email-every-10-min is the right design vs a pull-based uptime monitor (e.g. healthchecks.io / UptimeRobot) that alerts on _missing_ heartbeats.
+
+---
+
+# Part II — Admin UI + Monitoring platform (v2)
+
+The v1 heartbeat above still works exactly as described. v2 layers an admin API, a React SPA, and a monitoring engine on top, sharing one DB connection and the same graceful-shutdown wiring.
+
+## Architecture / package map
+
+```
+open_shine/
+├── main.go              wiring: open DB, seed admin, start mail loop + monitor + HTTP server
+├── mailer/              SMTP transport (multipart text+HTML, header sanitizing)
+├── report/              heartbeat email rendering (HTML + text)
+├── sysstat/             host + runtime metrics (Linux /proc + statfs; build-tagged)
+├── db/                  MySQL data layer
+│   ├── db.go            Open/Migrate/Seed + mail settings + mail_log
+│   ├── users.go         accounts (admin login store)
+│   ├── sessions.go      server-side sessions
+│   └── monitor.go       thresholds, targets, metric_history, alert_log
+├── auth/                bcrypt, opaque sessions, CSRF, login rate-limit, RequireAuth middleware
+├── monitor/             sampling loop: history + threshold eval + target checks + alerts
+├── notify/              alert channels (EmailNotifier; Noop when SMTP off)
+├── web/                 JSON API: router, handlers, security headers, optional SPA serving
+├── web-front/           React/Vite/TS SPA (login, dashboard, settings, logs)
+├── Caddyfile            public TLS reverse proxy (serves SPA + proxies /api)
+└── .env.example         all env vars
+```
+
+## New environment variables (beyond the v1 DB_*/SMTP_*)
+
+| Var | Purpose |
+|-----|---------|
+| `ADMIN_NAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Admin account seeded on first boot if absent (bcrypt-hashed). |
+| `COOKIE_SECURE` | `true` in prod (HTTPS); `false` for local plain-HTTP dev. |
+| `MONITOR_INTERVAL` | Sampling/check cadence, Go duration (default `60s`). |
+| `STATIC_DIR` | Optional: let the Go binary serve `web-front/dist` itself (Caddy normally does this). |
+
+DB is now **required** (backs auth/settings/monitoring) — the app fatals if it can't connect. SMTP stays optional (heartbeat + alert emails disabled without it; the API, dashboard, and metric sampling still run).
+
+## Database schema additions
+
+`sessions` (id, user_id FK→users, csrf_token, created/expires) · `thresholds` (metric cpu|mem|disk|load1, op gt|gte|lt|lte, value, enabled) · `targets` (name, kind http|tcp, address, enabled) · `metric_history` (ts, cpu, mem, disk, load1) · `alert_log` (ts, source, state breach|recovered, message). All added to the idempotent `migrations` slice in `db/db.go`.
+
+## API surface (all JSON, under `/api`)
+
+`POST /login` (public) · `POST /logout` · `GET /me` · `GET /metrics` (live snapshot) · `GET /metrics/history` · `GET|PUT /settings/mail` · `GET|POST /thresholds`, `PUT|DELETE /thresholds/{id}` · `GET|POST /targets`, `PUT|DELETE /targets/{id}` · `GET /logs` (mail_log) · `GET /alerts` (alert_log). Plus public `GET /healthz`.
+
+## Auth & security model
+
+- **Password:** bcrypt (cost 12) in `users.password_hash`.
+- **Sessions:** opaque 32-byte random id in an `HttpOnly`+`Secure`+`SameSite=Lax` cookie; stored server-side in `sessions` (revocable; expired rows pruned by the monitor loop).
+- **CSRF:** synchronizer token — issued per session, set in a JS-readable `csrf` cookie, required in `X-CSRF-Token` on every mutating request (POST/PUT/PATCH/DELETE). The SPA echoes it automatically.
+- **Login throttling:** in-memory per-IP lockout (5 fails → 10 min). `clientIP` trusts Caddy's `X-Forwarded-For`.
+- **Headers:** `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, HSTS on every response.
+
+## Monitoring engine (`monitor/`)
+
+Ticks every `MONITOR_INTERVAL`: collect `sysstat`, insert a `metric_history` row (Linux only), evaluate active thresholds against the live values, health-check active targets (http GET 2xx/3xx, or tcp dial), and **alert only on state transitions** (ok→breach / breach→ok) to avoid spam. Each alert is written to `alert_log` and emailed via `notify` (no-op if SMTP is off). Also prunes history older than 7 days and expired sessions.
+
+## Frontend (`web-front/`)
+
+React 18 + Vite + TS, dark theme matching the email. Pages: **Login**, **Dashboard** (live metric cards with bars + inline-SVG sparklines, 5s poll, recent alerts), **Settings** (mail / thresholds / targets CRUD), **Logs** (mail + alert log). API client sends credentials + CSRF header. `vite.config.ts` proxies `/api`→`:8080` in dev so the browser sees one origin (no CORS).
+
+- Dev: `cd web-front && npm install && npm run dev` (SPA on :5173, Go on :8080 with `COOKIE_SECURE=false`).
+- Build: `npm run build` → `web-front/dist/`.
+
+## Deployment changes (important — differs from v1's pure GitOps)
+
+1. **Caddy** terminates HTTPS, serves `web-front/dist`, and reverse-proxies `/api`+`/healthz` to `127.0.0.1:8080`. Edit `Caddyfile` (domain + dist path) then run/reload it (ideally as its own systemd service).
+2. **Frontend build on deploy:** Air rebuilds only the Go binary. The SPA needs `npm ci && npm run build` — run it in CI, or add a step to the updater script, or commit `dist/` (it's gitignored by default).
+3. **New env:** add the v2 vars to `/etc/open-shine.env`; set `COOKIE_SECURE=true`.
+4. **bcrypt dependency** added → `go.mod`/`go.sum` updated; commit both or the server build fails.
+
+## First-run / verification
+
+1. Set `ADMIN_EMAIL`/`ADMIN_PASSWORD` in env; on boot the log shows `created admin account <email>`.
+2. `curl https://<domain>/healthz` → `{"status":"ok"}`.
+3. Log in at the SPA; confirm dashboard shows live metrics, add a threshold (e.g. `disk gte 90`) and a target, watch `alert_log`.
+4. Verified end-to-end against MySQL 8.0 (Docker): migrations, login, CSRF (403 without token / 201 with), validation, CRUD, logout/session-invalidation, security headers. Pure-logic unit tests live in `auth/verify_test.go` and `monitor/verify_test.go`.
 
 ## Recovery characteristics (by design)
 

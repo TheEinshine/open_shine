@@ -3,54 +3,102 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/TheEinshine/open_shine/auth"
 	"github.com/TheEinshine/open_shine/db"
 	"github.com/TheEinshine/open_shine/mailer"
+	"github.com/TheEinshine/open_shine/monitor"
+	"github.com/TheEinshine/open_shine/notify"
 	"github.com/TheEinshine/open_shine/report"
 	"github.com/TheEinshine/open_shine/sysstat"
+	"github.com/TheEinshine/open_shine/web"
 )
 
 func main() {
-	// ctx is cancelled on the first SIGINT/SIGTERM, which both the mail loop
-	// and the HTTP server watch so shutdown is coordinated and clean.
+	// ctx is cancelled on the first SIGINT/SIGTERM; the mail loop, monitor, and
+	// HTTP server all watch it so shutdown is coordinated and clean.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// The database is required: it backs auth, settings, and monitoring.
+	store, err := db.Open()
+	if err != nil {
+		log.Fatalf("database unavailable: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(); err != nil {
+		log.Fatalf("migrate failed: %v", err)
+	}
+
+	// SMTP is optional. Without it the heartbeat email and alert emails are
+	// disabled, but the API, dashboard, and metric sampling still run.
+	smtpCfg, smtpErr := mailer.LoadConfig()
+	if smtpErr != nil {
+		log.Printf("mailer disabled: %v", smtpErr)
+	}
+	defaultRecipient := ""
+	if smtpErr == nil {
+		defaultRecipient = smtpCfg.User
+	}
+	if err := store.Seed(defaultRecipient); err != nil {
+		log.Printf("seed mail_settings failed: %v", err)
+	}
+
+	// Seed the admin account from env on first boot.
+	if created, err := auth.EnsureAdmin(store, getenv("ADMIN_NAME", "admin"), os.Getenv("ADMIN_EMAIL"), os.Getenv("ADMIN_PASSWORD")); err != nil {
+		log.Printf("admin seed failed: %v", err)
+	} else if created {
+		log.Printf("created admin account %s", os.Getenv("ADMIN_EMAIL"))
+	}
+
+	authn := auth.New(auth.Config{
+		Store:        store,
+		SessionTTL:   7 * 24 * time.Hour,
+		CookieSecure: envBool("COOKIE_SECURE", true),
+	})
+
 	var wg sync.WaitGroup
+
+	// Heartbeat report email loop (only when SMTP is configured).
+	if smtpErr == nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runMailLoop(ctx, store, smtpCfg)
+		}()
+	}
+
+	// Monitor loop always runs: samples metrics for history/dashboard and fires
+	// alerts. Alerts only email when SMTP is configured.
+	var notifier notify.Notifier = notify.Noop{}
+	if smtpErr == nil {
+		notifier = notify.EmailNotifier{Store: store, SMTP: smtpCfg}
+	}
+	engine := monitor.New(store, notifier, envDuration("MONITOR_INTERVAL", time.Minute), 7*24*time.Hour)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		startMailLoop(ctx)
+		engine.Run(ctx)
 	}()
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "Shine's Service v4 is running")
-	})
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "ok")
-	})
 
 	srv := &http.Server{
 		Addr:    ":8080",
-		Handler: mux,
-		// Bound every phase of a request so a slow or stalled client can't
-		// pin a connection open indefinitely (slow-loris protection).
+		Handler: web.New(store, authn, os.Getenv("STATIC_DIR")).Handler(),
+		// Bound every phase of a request so a slow client can't pin a connection.
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
 
-	// Drain in-flight requests when a shutdown signal arrives.
 	go func() {
 		<-ctx.Done()
 		log.Println("shutdown signal received, draining connections")
@@ -70,39 +118,9 @@ func main() {
 	log.Println("shutdown complete")
 }
 
-// startMailLoop wires up the mailer and runs the heartbeat loop until ctx is
-// cancelled. Any setup failure logs the reason and disables the loop without
-// taking down the HTTP server.
-func startMailLoop(ctx context.Context) {
-	smtpCfg, err := mailer.LoadConfig()
-	if err != nil {
-		log.Printf("mailer disabled: %v", err)
-		return
-	}
-
-	store, err := db.Open()
-	if err != nil {
-		log.Printf("mailer disabled: %v", err)
-		return
-	}
-	defer store.Close()
-
-	// Build the structure first, then seed default rows.
-	if err := store.Migrate(); err != nil {
-		log.Printf("mailer disabled: migrate failed: %v", err)
-		return
-	}
-	if err := store.Seed(smtpCfg.User); err != nil {
-		log.Printf("mailer disabled: seed failed: %v", err)
-		return
-	}
-
-	runMailLoop(ctx, store, smtpCfg)
-}
-
-// runMailLoop sends a heartbeat email every interval until ctx is cancelled.
-// The wait between cycles is interruptible, so a shutdown signal stops the loop
-// immediately instead of blocking for up to a full interval.
+// runMailLoop sends a heartbeat report email every interval until ctx is
+// cancelled. The wait between cycles is interruptible, so a shutdown signal
+// stops the loop immediately instead of blocking for up to a full interval.
 func runMailLoop(ctx context.Context, store *db.Store, smtpCfg mailer.Config) {
 	log.Println("mail loop started")
 	for {
@@ -114,7 +132,7 @@ func runMailLoop(ctx context.Context, store *db.Store, smtpCfg mailer.Config) {
 		} else {
 			wait = mailInterval(s.IntervalMins)
 			if s.Enabled && s.Recipient != "" {
-				sendHeartbeat(store, smtpCfg, s)
+				sendHeartbeat(ctx, store, smtpCfg, s)
 			}
 		}
 
@@ -129,7 +147,7 @@ func runMailLoop(ctx context.Context, store *db.Store, smtpCfg mailer.Config) {
 // renders them into an HTML report (with a plain-text fallback), emails it, and
 // records the outcome. The log stack reflects prior sends — this send is
 // recorded after it completes.
-func sendHeartbeat(store *db.Store, smtpCfg mailer.Config, s db.Settings) {
+func sendHeartbeat(ctx context.Context, store *db.Store, smtpCfg mailer.Config, s db.Settings) {
 	stats := sysstat.Collect()
 	logs, err := store.RecentLogs(8)
 	if err != nil {
@@ -148,13 +166,37 @@ func sendHeartbeat(store *db.Store, smtpCfg mailer.Config, s db.Settings) {
 		HTML:    report.RenderHTML(stats, logs),
 	}
 
-	if err := smtpCfg.SendMessage(msg); err != nil {
-		log.Printf("email send failed: %v", err)
+	if err := sendWithRetry(ctx, smtpCfg, msg, sendAttempts); err != nil {
+		log.Printf("email send failed after %d attempts: %v", sendAttempts, err)
 		store.LogSend("error", err.Error())
 		return
 	}
 	log.Printf("heartbeat email sent to %s", s.Recipient)
 	store.LogSend("ok", "")
+}
+
+// sendAttempts is the total number of send tries (1 initial + retries) before
+// a heartbeat is recorded as failed.
+const sendAttempts = 3
+
+// sendWithRetry sends msg, retrying transient failures with exponential backoff
+// (2s, 4s, ...). It returns the last error after exhausting attempts, or early
+// if ctx is cancelled during a backoff.
+func sendWithRetry(ctx context.Context, cfg mailer.Config, msg mailer.Message, attempts int) error {
+	var err error
+	for i := 0; i < attempts; i++ {
+		if i > 0 {
+			backoff := time.Duration(1<<(i-1)) * 2 * time.Second
+			log.Printf("email send attempt %d/%d failed, retrying in %v: %v", i, attempts, backoff, err)
+			if !sleep(ctx, backoff) {
+				return err // shutting down
+			}
+		}
+		if err = cfg.SendMessage(msg); err == nil {
+			return nil
+		}
+	}
+	return err
 }
 
 // mailInterval clamps the configured interval to a sane minimum.
@@ -176,4 +218,31 @@ func sleep(ctx context.Context, d time.Duration) bool {
 	case <-t.C:
 		return true
 	}
+}
+
+func getenv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+func envBool(key string, def bool) bool {
+	switch strings.ToLower(os.Getenv(key)) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return def
+	}
+}
+
+func envDuration(key string, def time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	return def
 }
