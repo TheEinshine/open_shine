@@ -103,9 +103,17 @@ func main() {
 	if smtpErr == nil {
 		smtpPtr = &smtpCfg
 	}
+
+	staticDir := os.Getenv("STATIC_DIR")
+	if staticDir == "" {
+		if _, err := os.Stat("web-front/dist"); err == nil {
+			staticDir = "web-front/dist"
+		}
+	}
+
 	srv := &http.Server{
 		Addr:    ":8080",
-		Handler: web.New(store, authn, os.Getenv("STATIC_DIR"), smtpPtr).Handler(),
+		Handler: web.New(store, authn, staticDir, smtpPtr).Handler(),
 		// Bound every phase of a request so a slow client can't pin a connection.
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
