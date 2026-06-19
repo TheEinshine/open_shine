@@ -3,10 +3,10 @@ package db
 import "time"
 
 type Subscriber struct {
-	ID        int
-	Email     string
-	Active    bool
-	CreatedAt time.Time
+	ID        int       `json:"id"`
+	Email     string    `json:"email"`
+	Active    bool      `json:"active"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // AddSubscriber adds a new subscriber or reactivates an existing one.
