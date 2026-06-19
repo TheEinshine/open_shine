@@ -121,6 +121,21 @@ var migrations = []string{
   message  TEXT NOT NULL,
   INDEX idx_alert_log_ts (ts)
 )`,
+	`CREATE TABLE IF NOT EXISTS newsletters (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  title        VARCHAR(255) NOT NULL,
+  subject      VARCHAR(255) NOT NULL,
+  body_html    LONGTEXT NOT NULL,
+  body_text    TEXT,
+  recipient    VARCHAR(255) NOT NULL,
+  status       VARCHAR(20) NOT NULL DEFAULT 'draft',
+  scheduled_at DATETIME NULL,
+  sent_at      DATETIME NULL,
+  error        TEXT,
+  created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_newsletters_status_scheduled (status, scheduled_at)
+)`,
 }
 
 // Close releases the underlying connection pool.

@@ -1,12 +1,14 @@
 package web
 
 import (
+	"database/sql"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/TheEinshine/open_shine/auth"
 	"github.com/TheEinshine/open_shine/db"
+	"github.com/TheEinshine/open_shine/newsletter"
 	"github.com/TheEinshine/open_shine/sysstat"
 )
 
@@ -279,6 +281,104 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, alerts)
 }
 
+// ---- newsletters ----
+
+func (s *Server) handleListNewsletters(w http.ResponseWriter, r *http.Request) {
+	list, err := s.store.ListNewsletters()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not list newsletters")
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+func (s *Server) handleGetNewsletter(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	nl, err := s.store.GetNewsletter(id)
+	if err == sql.ErrNoRows {
+		writeError(w, http.StatusNotFound, "newsletter not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not read newsletter")
+		return
+	}
+	writeJSON(w, http.StatusOK, nl)
+}
+
+func (s *Server) handleCreateNewsletter(w http.ResponseWriter, r *http.Request) {
+	var in db.Newsletter
+	if !readJSON(w, r, &in) {
+		return
+	}
+	if in.Title == "" || in.Subject == "" || in.Recipient == "" || in.BodyHTML == "" {
+		writeError(w, http.StatusBadRequest, "title, subject, recipient, and bodyHtml are required")
+		return
+	}
+	id, err := s.store.CreateNewsletter(in)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not create newsletter")
+		return
+	}
+	in.ID = id
+	writeJSON(w, http.StatusCreated, in)
+}
+
+func (s *Server) handleUpdateNewsletter(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	var in db.Newsletter
+	if !readJSON(w, r, &in) {
+		return
+	}
+	if in.Title == "" || in.Subject == "" || in.Recipient == "" || in.BodyHTML == "" {
+		writeError(w, http.StatusBadRequest, "title, subject, recipient, and bodyHtml are required")
+		return
+	}
+	in.ID = id
+	if err := s.store.UpdateNewsletter(in); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not update newsletter")
+		return
+	}
+	writeJSON(w, http.StatusOK, in)
+}
+
+func (s *Server) handleDeleteNewsletter(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	if err := s.store.DeleteNewsletter(id); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not delete newsletter")
+		return
+	}
+	writeJSON(w, http.StatusNoContent, nil)
+}
+
+func (s *Server) handleSendNewsletter(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	if s.smtp == nil {
+		writeError(w, http.StatusServiceUnavailable, "SMTP is not configured")
+		return
+	}
+	if err := newsletter.SendNow(s.store, *s.smtp, id); err == sql.ErrNoRows {
+		writeError(w, http.StatusNotFound, "newsletter not found")
+		return
+	} else if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not send newsletter: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+}
+
 // ---- helpers ----
 
 func pathID(w http.ResponseWriter, r *http.Request) (int, bool) {
@@ -303,3 +403,4 @@ func queryInt(r *http.Request, key string, def, min, max int) int {
 	}
 	return v
 }
+

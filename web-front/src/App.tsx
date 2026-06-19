@@ -5,6 +5,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { Login } from "./pages/Login";
 import { Logs } from "./pages/Logs";
 import { Settings } from "./pages/Settings";
+import { Newsletters } from "./pages/Newsletters";
 import type { ReactElement } from "react";
 
 function Guard({ children }: { children: ReactElement }) {
@@ -32,6 +33,7 @@ function Routed() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/logs" element={<Logs />} />
+        <Route path="/newsletters" element={<Newsletters />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -131,3 +131,157 @@ td.mono, th.mono { font-family: var(--mono); }
 .login-card .brand { justify-content: center; margin-bottom: 20px; font-size: 18px; }
 
 .spinner { color: var(--muted); padding: 40px; text-align: center; font-family: var(--mono); }
+
+/* ── newsletters ─────────────────────────────────────────── */
+
+.nl-form {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.25s ease,
+              margin 0.35s ease;
+  margin-bottom: 0;
+}
+.nl-form.open {
+  max-height: 1000px;
+  opacity: 1;
+  margin-bottom: 16px;
+}
+
+.nl-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 16px;
+}
+@media (max-width: 640px) {
+  .nl-form-grid { grid-template-columns: 1fr; }
+}
+
+.nl-editor {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+  background: #050506;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  width: 100%;
+  resize: vertical;
+  min-height: 140px;
+  line-height: 1.6;
+  transition: border-color 0.15s;
+}
+.nl-editor:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.nl-editor-sm {
+  min-height: 80px;
+}
+
+.nl-datetime {
+  color-scheme: dark;
+}
+
+/* status badges */
+.nl-status {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.nl-status.draft {
+  color: var(--muted);
+  background: rgba(107, 107, 112, 0.15);
+}
+.nl-status.scheduled {
+  color: var(--warn);
+  background: rgba(251, 191, 36, 0.12);
+}
+.nl-status.sent {
+  color: var(--good);
+  background: rgba(52, 211, 153, 0.12);
+}
+.nl-status.failed {
+  color: var(--crit);
+  background: rgba(248, 113, 113, 0.12);
+}
+
+/* action buttons */
+.nl-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
+}
+.nl-schedule-btn {
+  background: transparent !important;
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
+.nl-schedule-btn:hover {
+  background: rgba(96, 165, 250, 0.1) !important;
+}
+
+/* empty state */
+.nl-empty {
+  text-align: center;
+  padding: 48px 20px;
+}
+.nl-empty-icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+  opacity: 0.6;
+}
+.nl-empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 6px;
+  color: var(--text);
+}
+.nl-empty-sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 20px;
+}
+
+/* confirmation overlay */
+.nl-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  animation: nl-fade-in 0.15s ease;
+}
+.nl-confirm-card {
+  min-width: 340px;
+  max-width: 420px;
+  animation: nl-slide-up 0.2s ease;
+}
+
+@keyframes nl-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes nl-slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* table hover */
+.card table tbody tr {
+  transition: background 0.12s ease;
+}
+.card table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}

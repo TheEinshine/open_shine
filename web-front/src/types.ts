@@ -71,3 +71,18 @@ export interface Alert {
   state: string;
   message: string;
 }
+
+export interface Newsletter {
+  id: number;
+  title: string;
+  subject: string;
+  bodyHtml: string;
+  bodyText: string;
+  recipient: string;
+  status: "draft" | "scheduled" | "sent" | "failed";
+  scheduledAt: string | null;
+  sentAt: string | null;
+  error: string;
+  createdAt: string;
+  updatedAt: string;
+}

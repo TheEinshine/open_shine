@@ -9,6 +9,7 @@ import (
 
 	"github.com/TheEinshine/open_shine/auth"
 	"github.com/TheEinshine/open_shine/db"
+	"github.com/TheEinshine/open_shine/mailer"
 )
 
 // Server holds the API dependencies.
@@ -16,10 +17,11 @@ type Server struct {
 	store     *db.Store
 	auth      *auth.Authenticator
 	staticDir string // optional: serve the built SPA from here (empty = API only)
+	smtp      *mailer.Config
 }
 
-func New(store *db.Store, a *auth.Authenticator, staticDir string) *Server {
-	return &Server{store: store, auth: a, staticDir: staticDir}
+func New(store *db.Store, a *auth.Authenticator, staticDir string, smtp *mailer.Config) *Server {
+	return &Server{store: store, auth: a, staticDir: staticDir, smtp: smtp}
 }
 
 // Handler builds the routed, middleware-wrapped HTTP handler.
@@ -49,6 +51,12 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("DELETE /api/targets/{id}", s.handleDeleteTarget)
 	api.HandleFunc("GET /api/logs", s.handleLogs)
 	api.HandleFunc("GET /api/alerts", s.handleAlerts)
+	api.HandleFunc("GET /api/newsletters", s.handleListNewsletters)
+	api.HandleFunc("GET /api/newsletters/{id}", s.handleGetNewsletter)
+	api.HandleFunc("POST /api/newsletters", s.handleCreateNewsletter)
+	api.HandleFunc("PUT /api/newsletters/{id}", s.handleUpdateNewsletter)
+	api.HandleFunc("DELETE /api/newsletters/{id}", s.handleDeleteNewsletter)
+	api.HandleFunc("POST /api/newsletters/{id}/send", s.handleSendNewsletter)
 	mux.Handle("/api/", s.auth.RequireAuth(api))
 
 	// Optional SPA serving (Caddy normally does this in production).

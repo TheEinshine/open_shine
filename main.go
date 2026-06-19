@@ -16,6 +16,7 @@ import (
 	"github.com/TheEinshine/open_shine/db"
 	"github.com/TheEinshine/open_shine/mailer"
 	"github.com/TheEinshine/open_shine/monitor"
+	"github.com/TheEinshine/open_shine/newsletter"
 	"github.com/TheEinshine/open_shine/notify"
 	"github.com/TheEinshine/open_shine/report"
 	"github.com/TheEinshine/open_shine/sysstat"
@@ -89,9 +90,22 @@ func main() {
 		engine.Run(ctx)
 	}()
 
+	// Newsletter auto-publish loop (only when SMTP is configured).
+	if smtpErr == nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			newsletter.Loop(ctx, store, smtpCfg)
+		}()
+	}
+
+	var smtpPtr *mailer.Config
+	if smtpErr == nil {
+		smtpPtr = &smtpCfg
+	}
 	srv := &http.Server{
 		Addr:    ":8080",
-		Handler: web.New(store, authn, os.Getenv("STATIC_DIR")).Handler(),
+		Handler: web.New(store, authn, os.Getenv("STATIC_DIR"), smtpPtr).Handler(),
 		// Bound every phase of a request so a slow client can't pin a connection.
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
