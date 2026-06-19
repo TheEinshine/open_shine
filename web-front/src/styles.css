@@ -144,7 +144,7 @@ td.mono, th.mono { font-family: var(--mono); }
   margin-bottom: 0;
 }
 .nl-form.open {
-  max-height: 1000px;
+  max-height: 5000px;
   opacity: 1;
   margin-bottom: 16px;
 }
