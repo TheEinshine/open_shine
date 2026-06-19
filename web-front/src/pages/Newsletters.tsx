@@ -1,4 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
+import ReactQuill from "react-quill";
+import "react-quill/dist/quill.snow.css";
 import { api } from "../api";
 import { fmtTime } from "../util";
 import type { Newsletter } from "../types";
@@ -6,7 +8,6 @@ import type { Newsletter } from "../types";
 interface FormData {
   title: string;
   subject: string;
-  recipient: string;
   bodyHtml: string;
   bodyText: string;
   scheduledAt: string;
@@ -15,7 +16,6 @@ interface FormData {
 const EMPTY_FORM: FormData = {
   title: "",
   subject: "",
-  recipient: "",
   bodyHtml: "",
   bodyText: "",
   scheduledAt: "",
@@ -80,7 +80,6 @@ export function Newsletters() {
     setForm({
       title: nl.title,
       subject: nl.subject,
-      recipient: nl.recipient,
       bodyHtml: nl.bodyHtml,
       bodyText: nl.bodyText,
       scheduledAt: nl.scheduledAt ? toLocalInput(nl.scheduledAt) : "",
@@ -104,7 +103,6 @@ export function Newsletters() {
       subject: form.subject,
       bodyHtml: form.bodyHtml,
       bodyText: form.bodyText,
-      recipient: form.recipient,
       scheduledAt: schedule && form.scheduledAt ? new Date(form.scheduledAt).toISOString() : null,
     };
     try {
@@ -199,17 +197,6 @@ export function Newsletters() {
                 />
               </label>
               <label className="field">
-                <span>Recipient email</span>
-                <input
-                  id="nl-recipient"
-                  type="email"
-                  value={form.recipient}
-                  onChange={(e) => setForm({ ...form, recipient: e.target.value })}
-                  required
-                  placeholder="user@example.com"
-                />
-              </label>
-              <label className="field">
                 <span>Schedule at</span>
                 <input
                   id="nl-scheduled-at"
@@ -220,18 +207,61 @@ export function Newsletters() {
                 />
               </label>
             </div>
-            <label className="field">
+            <label className="field" style={{ paddingBottom: "50px" }}>
               <span>Body HTML</span>
-              <textarea
-                id="nl-body-html"
-                className="nl-editor"
+              <ReactQuill
+                theme="snow"
                 value={form.bodyHtml}
-                onChange={(e) => setForm({ ...form, bodyHtml: e.target.value })}
-                required
-                placeholder="<h1>Hello!</h1><p>Your newsletter content here...</p>"
-                rows={10}
+                onChange={(content) => setForm({ ...form, bodyHtml: content })}
+                placeholder="Write your newsletter content here..."
+                style={{ height: "300px", marginBottom: "40px" }}
               />
             </label>
+
+            <div style={{ padding: "16px", background: "var(--panel-2)", border: "1px solid var(--border)", borderRadius: "8px", marginBottom: "24px" }}>
+              <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", color: "var(--accent)" }}>✨ Article Curator</h3>
+              <p style={{ margin: "0 0 12px 0", fontSize: "12px", color: "var(--muted)" }}>Quickly generate beautifully formatted article blocks and append them to your newsletter.</p>
+              <div style={{ display: "flex", gap: "12px", marginBottom: "12px" }}>
+                <input id="curate-title" placeholder="Article Title" style={{ flex: 1 }} />
+                <input id="curate-url" placeholder="https://..." style={{ flex: 1 }} />
+              </div>
+              <textarea id="curate-desc" placeholder="Brief description..." rows={2} style={{ width: "100%", marginBottom: "12px" }} />
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  const titleInput = document.getElementById("curate-title") as HTMLInputElement;
+                  const urlInput = document.getElementById("curate-url") as HTMLInputElement;
+                  const descInput = document.getElementById("curate-desc") as HTMLTextAreaElement;
+                  const title = titleInput.value.trim();
+                  const url = urlInput.value.trim();
+                  const desc = descInput.value.trim();
+                  
+                  if (!title || !url) {
+                    alert("Title and URL are required to curate an article.");
+                    return;
+                  }
+                  
+                  const block = `
+                    <div style="margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid #34343a;">
+                      <h2 style="margin: 0 0 8px 0; font-size: 18px;">
+                        <a href="${url}" target="_blank" style="color: #60a5fa; text-decoration: none;">${title} &rarr;</a>
+                      </h2>
+                      <p style="margin: 0; color: #9a9aa0; line-height: 1.6; font-size: 14px;">${desc}</p>
+                    </div>
+                  `;
+                  
+                  setForm(prev => ({ ...prev, bodyHtml: prev.bodyHtml + block }));
+                  
+                  titleInput.value = "";
+                  urlInput.value = "";
+                  descInput.value = "";
+                }}
+              >
+                + Append to Newsletter
+              </button>
+            </div>
+
             <label className="field">
               <span>Body Text <span className="muted">(optional plain-text fallback)</span></span>
               <textarea
@@ -312,7 +342,9 @@ export function Newsletters() {
       {/* Newsletter list */}
       <div className="card">
         {loading ? (
-          <div className="spinner">loading…</div>
+          <div style={{ textAlign: "center", padding: "40px" }}>
+            <div className="spinner"></div>
+          </div>
         ) : list.length === 0 ? (
           <div className="nl-empty">
             <div className="nl-empty-icon">📨</div>
@@ -330,7 +362,6 @@ export function Newsletters() {
               <tr>
                 <th>Title</th>
                 <th>Subject</th>
-                <th>Recipient</th>
                 <th>Status</th>
                 <th>Scheduled</th>
                 <th>Sent</th>
@@ -342,7 +373,6 @@ export function Newsletters() {
                 <tr key={nl.id}>
                   <td style={{ fontWeight: 500 }}>{nl.title}</td>
                   <td className="muted" style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nl.subject}</td>
-                  <td className="mono" style={{ fontSize: 12 }}>{nl.recipient}</td>
                   <td>
                     <span className={`nl-status ${STATUS_CLASS[nl.status]}`} id={`nl-status-${nl.id}`}>
                       {STATUS_LABEL[nl.status]}

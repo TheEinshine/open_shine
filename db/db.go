@@ -136,6 +136,12 @@ var migrations = []string{
   updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_newsletters_status_scheduled (status, scheduled_at)
 )`,
+	`CREATE TABLE IF NOT EXISTS subscribers (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  email      VARCHAR(255) NOT NULL UNIQUE,
+  active     BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+)`,
 }
 
 // Close releases the underlying connection pool.

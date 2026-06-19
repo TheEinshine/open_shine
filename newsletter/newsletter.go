@@ -3,6 +3,7 @@ package newsletter
 import (
 	"context"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/TheEinshine/open_shine/db"
@@ -35,38 +36,79 @@ func processDue(store *db.Store, smtp mailer.Config) {
 		log.Printf("newsletter: could not query due newsletters: %v", err)
 		return
 	}
+	if len(newsletters) == 0 {
+		return
+	}
+
+	subscribers, err := store.ActiveSubscribers()
+	if err != nil {
+		log.Printf("newsletter: could not query active subscribers: %v", err)
+		return
+	}
+
 	for _, nl := range newsletters {
-		msg := mailer.Message{
-			To:      nl.Recipient,
-			Subject: nl.Subject,
-			HTML:    nl.BodyHTML,
-			Text:    nl.BodyText,
-		}
-		if err := smtp.SendMessage(msg); err != nil {
-			log.Printf("newsletter: failed to send #%d %q: %v", nl.ID, nl.Title, err)
-			store.MarkFailed(nl.ID, err.Error())
+		if len(subscribers) == 0 {
+			log.Printf("newsletter: skipped #%d %q (no active subscribers)", nl.ID, nl.Title)
+			store.MarkSent(nl.ID)
 			continue
 		}
-		log.Printf("newsletter: sent #%d %q to %s", nl.ID, nl.Title, nl.Recipient)
-		store.MarkSent(nl.ID)
+		var errs []string
+		for _, sub := range subscribers {
+			msg := mailer.Message{
+				To:      sub.Email,
+				Subject: nl.Subject,
+				HTML:    nl.BodyHTML,
+				Text:    nl.BodyText,
+			}
+			if err := smtp.SendMessage(msg); err != nil {
+				log.Printf("newsletter: failed to send #%d to %s: %v", nl.ID, sub.Email, err)
+				errs = append(errs, err.Error())
+			} else {
+				log.Printf("newsletter: sent #%d %q to %s", nl.ID, nl.Title, sub.Email)
+			}
+		}
+		
+		if len(errs) > 0 {
+			store.MarkFailed(nl.ID, strings.Join(errs, "; "))
+		} else {
+			store.MarkSent(nl.ID)
+		}
 	}
 }
 
-// SendNow immediately sends a single newsletter by ID, regardless of its schedule.
+// SendNow immediately sends a single newsletter by ID to all active subscribers.
 func SendNow(store *db.Store, smtp mailer.Config, id int) error {
 	nl, err := store.GetNewsletter(id)
 	if err != nil {
 		return err
 	}
-	msg := mailer.Message{
-		To:      nl.Recipient,
-		Subject: nl.Subject,
-		HTML:    nl.BodyHTML,
-		Text:    nl.BodyText,
-	}
-	if err := smtp.SendMessage(msg); err != nil {
-		store.MarkFailed(id, err.Error())
+	
+	subscribers, err := store.ActiveSubscribers()
+	if err != nil {
 		return err
+	}
+	
+	if len(subscribers) == 0 {
+		store.MarkSent(id)
+		return nil
+	}
+
+	var errs []string
+	for _, sub := range subscribers {
+		msg := mailer.Message{
+			To:      sub.Email,
+			Subject: nl.Subject,
+			HTML:    nl.BodyHTML,
+			Text:    nl.BodyText,
+		}
+		if err := smtp.SendMessage(msg); err != nil {
+			errs = append(errs, err.Error())
+		}
+	}
+	
+	if len(errs) > 0 {
+		store.MarkFailed(id, strings.Join(errs, "; "))
+		return nil // We still return nil for the HTTP response so the UI doesn't crash on partial failure
 	}
 	store.MarkSent(id)
 	return nil
