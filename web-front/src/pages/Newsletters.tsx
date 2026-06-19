@@ -126,26 +126,32 @@ export function Newsletters() {
 
   async function handleDelete(id: number) {
     setErr("");
+    setBusy(true);
     try {
       await api.del(`/newsletters/${id}`);
       flash("Newsletter deleted.");
       reload();
     } catch (e) {
       fail(e);
+    } finally {
+      setBusy(false);
+      setConfirm(null);
     }
-    setConfirm(null);
   }
 
   async function handleSendNow(id: number) {
     setErr("");
+    setBusy(true);
     try {
       await api.post(`/newsletters/${id}/send`);
       flash("Newsletter sent!");
       reload();
     } catch (e) {
       fail(e);
+    } finally {
+      setBusy(false);
+      setConfirm(null);
     }
-    setConfirm(null);
   }
 
   return (
@@ -241,14 +247,21 @@ export function Newsletters() {
                     try {
                       const res = await api.get<{title: string, description: string, image: string}>(`/preview-url?url=${encodeURIComponent(url)}`);
                       
+                      let finalTitle = res.title;
+                      let finalDesc = res.description;
+                      if (!finalTitle) {
+                        finalTitle = prompt("We couldn't auto-fetch the title for this site. Please enter the article title:") || url;
+                        finalDesc = prompt("Please enter a brief description (optional):") || "";
+                      }
+                      
                       const imgHtml = res.image ? `<img src="${res.image}" style="max-width: 100%; border-radius: 6px; margin-bottom: 12px;" />` : "";
                       const block = `
                         <div style="margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid #e4e4e7;">
                           ${imgHtml}
                           <h2 style="margin: 0 0 8px 0; font-size: 18px;">
-                            <a href="${url}" target="_blank" style="color: #3b82f6; text-decoration: none;">${res.title || url} &rarr;</a>
+                            <a href="${url}" target="_blank" style="color: #3b82f6; text-decoration: none;">${finalTitle} &rarr;</a>
                           </h2>
-                          <p style="margin: 0; color: #3f3f46; line-height: 1.6; font-size: 14px;">${res.description || ""}</p>
+                          <p style="margin: 0; color: #3f3f46; line-height: 1.6; font-size: 14px;">${finalDesc}</p>
                         </div>
                       `;
                       setForm(prev => ({ ...prev, bodyHtml: prev.bodyHtml + block }));
