@@ -96,7 +96,7 @@ export function Newsletters() {
     setForm({ ...EMPTY_FORM });
   }
 
-  async function handleSave(e: FormEvent, schedule: boolean) {
+  async function handleSave(e: FormEvent, schedule: boolean, sendNow: boolean = false) {
     e.preventDefault();
     setErr("");
     setBusy(true);
@@ -108,13 +108,21 @@ export function Newsletters() {
       scheduledAt: schedule && form.scheduledAt ? new Date(form.scheduledAt).toISOString() : null,
     };
     try {
+      let savedId = editingId;
       if (editingId) {
         await api.put<Newsletter>(`/newsletters/${editingId}`, body);
         flash("Newsletter updated.");
       } else {
-        await api.post<Newsletter>("/newsletters", body);
+        const created = await api.post<Newsletter>("/newsletters", body);
+        savedId = created.id;
         flash(schedule ? "Newsletter scheduled." : "Draft saved.");
       }
+      
+      if (sendNow && savedId) {
+        await api.post(`/newsletters/${savedId}/send`);
+        flash("Newsletter sent!");
+      }
+      
       closeForm();
       reload();
     } catch (e) {
@@ -297,7 +305,7 @@ export function Newsletters() {
                 className="primary"
                 disabled={busy}
               >
-                {busy ? "Saving…" : editingId ? "Update" : "Save as Draft"}
+                {busy ? "Saving…" : editingId ? "Update Draft" : "Save as Draft"}
               </button>
               {form.scheduledAt && (
                 <button
@@ -310,6 +318,20 @@ export function Newsletters() {
                   {busy ? "Scheduling…" : "Schedule"}
                 </button>
               )}
+              <button
+                id="nl-send-now"
+                type="button"
+                className="primary"
+                style={{ background: "#10b981", borderColor: "#059669", marginLeft: "auto" }}
+                disabled={busy}
+                onClick={(e) => {
+                  if (window.confirm("Are you sure you want to send this newsletter to all subscribers right now?")) {
+                    handleSave(e as unknown as FormEvent, false, true);
+                  }
+                }}
+              >
+                {busy ? "Sending…" : "Send Now"}
+              </button>
               <button
                 id="nl-cancel"
                 type="button"
