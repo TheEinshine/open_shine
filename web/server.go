@@ -60,6 +60,7 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("GET /api/subscribers", s.handleListSubscribers)
 	api.HandleFunc("POST /api/subscribers", s.handleAddSubscriber)
 	api.HandleFunc("DELETE /api/subscribers/{id}", s.handleDeleteSubscriber)
+	api.HandleFunc("GET /api/preview-url", s.handlePreviewURL)
 	mux.Handle("/api/", s.auth.RequireAuth(api))
 
 	// Optional SPA serving (Caddy normally does this in production).

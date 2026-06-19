@@ -57,7 +57,7 @@ func processDue(store *db.Store, smtp mailer.Config) {
 			msg := mailer.Message{
 				To:      sub.Email,
 				Subject: nl.Subject,
-				HTML:    nl.BodyHTML,
+				HTML:    WrapHTML(nl.BodyHTML),
 				Text:    nl.BodyText,
 			}
 			if err := smtp.SendMessage(msg); err != nil {

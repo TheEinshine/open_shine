@@ -301,3 +301,6 @@ td.mono, th.mono { font-family: var(--mono); }
   to { transform: rotate(360deg); }
 }
 
+
+.quill-wrapper .ql-container { min-height: 200px; }
+.quill-wrapper .ql-editor { min-height: 200px; }

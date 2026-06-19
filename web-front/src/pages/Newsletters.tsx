@@ -207,59 +207,61 @@ export function Newsletters() {
                 />
               </label>
             </div>
-            <label className="field" style={{ paddingBottom: "50px" }}>
+            <label className="field" style={{ paddingBottom: "16px" }}>
               <span>Body HTML</span>
-              <ReactQuill
-                theme="snow"
-                value={form.bodyHtml}
-                onChange={(content) => setForm({ ...form, bodyHtml: content })}
-                placeholder="Write your newsletter content here..."
-                style={{ height: "300px", marginBottom: "40px" }}
-              />
+              <div className="quill-wrapper" style={{ background: "#fff", color: "#000", borderRadius: "8px", overflow: "hidden", border: "1px solid var(--border)" }}>
+                <ReactQuill
+                  theme="snow"
+                  value={form.bodyHtml}
+                  onChange={(content) => setForm({ ...form, bodyHtml: content })}
+                  placeholder="Write your newsletter content here..."
+                />
+              </div>
             </label>
 
             <div style={{ padding: "16px", background: "var(--panel-2)", border: "1px solid var(--border)", borderRadius: "8px", marginBottom: "24px" }}>
               <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", color: "var(--accent)" }}>✨ Article Curator</h3>
-              <p style={{ margin: "0 0 12px 0", fontSize: "12px", color: "var(--muted)" }}>Quickly generate beautifully formatted article blocks and append them to your newsletter.</p>
+              <p style={{ margin: "0 0 12px 0", fontSize: "12px", color: "var(--muted)" }}>Paste an article URL. We will automatically fetch the preview (title, image, description) and inject it into the newsletter.</p>
               <div style={{ display: "flex", gap: "12px", marginBottom: "12px" }}>
-                <input id="curate-title" placeholder="Article Title" style={{ flex: 1 }} />
                 <input id="curate-url" placeholder="https://..." style={{ flex: 1 }} />
+                <button
+                  type="button"
+                  className="secondary"
+                  id="curate-btn"
+                  onClick={async () => {
+                    const urlInput = document.getElementById("curate-url") as HTMLInputElement;
+                    const btn = document.getElementById("curate-btn") as HTMLButtonElement;
+                    const url = urlInput.value.trim();
+                    if (!url) return;
+                    
+                    btn.disabled = true;
+                    btn.textContent = "Fetching...";
+                    try {
+                      const res = await api.get<{title: string, description: string, image: string}>(`/preview-url?url=${encodeURIComponent(url)}`);
+                      
+                      const imgHtml = res.image ? `<img src="${res.image}" style="max-width: 100%; border-radius: 6px; margin-bottom: 12px;" />` : "";
+                      const block = `
+                        <div style="margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid #e4e4e7;">
+                          ${imgHtml}
+                          <h2 style="margin: 0 0 8px 0; font-size: 18px;">
+                            <a href="${url}" target="_blank" style="color: #3b82f6; text-decoration: none;">${res.title || url} &rarr;</a>
+                          </h2>
+                          <p style="margin: 0; color: #3f3f46; line-height: 1.6; font-size: 14px;">${res.description || ""}</p>
+                        </div>
+                      `;
+                      setForm(prev => ({ ...prev, bodyHtml: prev.bodyHtml + block }));
+                      urlInput.value = "";
+                    } catch (e: unknown) {
+                      alert("Failed to fetch article preview: " + ((e as Error).message || "Unknown error"));
+                    } finally {
+                      btn.disabled = false;
+                      btn.textContent = "Fetch & Append";
+                    }
+                  }}
+                >
+                  Fetch & Append
+                </button>
               </div>
-              <textarea id="curate-desc" placeholder="Brief description..." rows={2} style={{ width: "100%", marginBottom: "12px" }} />
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => {
-                  const titleInput = document.getElementById("curate-title") as HTMLInputElement;
-                  const urlInput = document.getElementById("curate-url") as HTMLInputElement;
-                  const descInput = document.getElementById("curate-desc") as HTMLTextAreaElement;
-                  const title = titleInput.value.trim();
-                  const url = urlInput.value.trim();
-                  const desc = descInput.value.trim();
-                  
-                  if (!title || !url) {
-                    alert("Title and URL are required to curate an article.");
-                    return;
-                  }
-                  
-                  const block = `
-                    <div style="margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid #34343a;">
-                      <h2 style="margin: 0 0 8px 0; font-size: 18px;">
-                        <a href="${url}" target="_blank" style="color: #60a5fa; text-decoration: none;">${title} &rarr;</a>
-                      </h2>
-                      <p style="margin: 0; color: #9a9aa0; line-height: 1.6; font-size: 14px;">${desc}</p>
-                    </div>
-                  `;
-                  
-                  setForm(prev => ({ ...prev, bodyHtml: prev.bodyHtml + block }));
-                  
-                  titleInput.value = "";
-                  urlInput.value = "";
-                  descInput.value = "";
-                }}
-              >
-                + Append to Newsletter
-              </button>
             </div>
 
             <label className="field">
