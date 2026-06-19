@@ -242,7 +242,6 @@ export function Newsletters() {
                 <input id="curate-url" placeholder="https://..." style={{ flex: 1 }} />
                 <button
                   type="button"
-                  className="secondary"
                   id="curate-btn"
                   onClick={async () => {
                     const urlInput = document.getElementById("curate-url") as HTMLInputElement;

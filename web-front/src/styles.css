@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
 :root {
   --page: #fdfbf7;
   --panel: #ffffff;
@@ -12,7 +14,7 @@
   --crit: #c27b7b;
   --accent: #8c7a6b;
   --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -37,15 +39,19 @@ button {
   background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 8px 14px;
+  padding: 8px 16px;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition: all 0.2s ease;
 }
-button:hover { border-color: var(--text); }
+button:hover:not(:disabled) { border-color: var(--text); background: var(--border); }
+button:active:not(:disabled) { transform: scale(0.97); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
-button.primary { background: var(--accent); border-color: var(--accent); color: #ffffff; font-weight: 600; }
-button.danger { color: var(--crit); }
-button.ghost { background: transparent; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #ffffff; font-weight: 500; }
+button.primary:hover:not(:disabled) { opacity: 0.9; background: var(--accent); border-color: var(--accent); }
+button.danger { color: var(--crit); border-color: transparent; background: rgba(194,123,123,0.1); }
+button.danger:hover:not(:disabled) { background: rgba(194,123,123,0.2); }
+button.ghost { background: transparent; border-color: transparent; }
+button.ghost:hover:not(:disabled) { background: var(--panel-2); }
 
 input, select {
   font-family: var(--sans);
@@ -54,10 +60,11 @@ input, select {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 10px 14px;
   width: 100%;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
-input:focus, select:focus { outline: none; border-color: var(--accent); }
+input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(140, 122, 107, 0.1); }
 label.field { display: block; margin-bottom: 12px; }
 label.field span { display: block; color: var(--label); font-size: 12px; margin-bottom: 5px; }
 
@@ -68,10 +75,10 @@ label.field span { display: block; color: var(--label); font-size: 12px; margin-
 /* layout */
 .app { display: flex; min-height: 100vh; }
 .sidebar {
-  width: 220px;
-  background: var(--panel);
+  width: 240px;
+  background: var(--page);
   border-right: 1px solid var(--border);
-  padding: 22px 16px;
+  padding: 24px 16px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -79,12 +86,12 @@ label.field span { display: block; color: var(--label); font-size: 12px; margin-
   top: 0;
   height: 100vh;
 }
-.brand { display: flex; align-items: center; gap: 9px; font-weight: 600; letter-spacing: 0.5px; margin-bottom: 22px; padding: 0 8px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: 0.5px; margin-bottom: 24px; padding: 0 12px; font-size: 15px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); display: inline-block; }
 .dot.warn { background: var(--warn); } .dot.crit { background: var(--crit); }
-.nav-link { display: block; padding: 9px 12px; border-radius: 8px; color: var(--label); }
-.nav-link:hover { background: var(--panel-2); }
-.nav-link.active { background: var(--panel-2); color: var(--text); }
+.nav-link { display: block; padding: 10px 14px; border-radius: 8px; color: var(--muted); font-weight: 500; transition: all 0.2s ease; }
+.nav-link:hover { background: var(--panel); color: var(--text); }
+.nav-link.active { background: var(--panel); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
 .sidebar .spacer { flex: 1; }
 .who { font-size: 12px; color: var(--muted); padding: 0 8px 10px; word-break: break-all; }
 
@@ -93,7 +100,7 @@ label.field span { display: block; color: var(--label); font-size: 12px; margin-
 .page-sub { color: var(--muted); font-size: 12px; margin: 0 0 24px; font-family: var(--mono); }
 
 /* cards */
-.card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 24px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.015); }
 .grid { display: grid; gap: 16px; }
 .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
 .grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
