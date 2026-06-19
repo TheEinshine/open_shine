@@ -181,7 +181,7 @@ td.mono, th.mono { font-family: var(--mono); }
 }
 
 .nl-datetime {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 /* status badges */

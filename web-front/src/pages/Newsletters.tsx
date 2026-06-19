@@ -70,7 +70,9 @@ export function Newsletters() {
 
   function openCreate() {
     setEditingId(null);
-    setForm({ ...EMPTY_FORM });
+    const tzOffset = new Date().getTimezoneOffset() * 60000;
+    const defaultTime = new Date(Date.now() - tzOffset + 3600000).toISOString().slice(0, 16);
+    setForm({ ...EMPTY_FORM, scheduledAt: defaultTime });
     setFormOpen(true);
     setErr("");
   }

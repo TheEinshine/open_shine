@@ -314,8 +314,8 @@ func (s *Server) handleCreateNewsletter(w http.ResponseWriter, r *http.Request) 
 	if !readJSON(w, r, &in) {
 		return
 	}
-	if in.Title == "" || in.Subject == "" || in.Recipient == "" || in.BodyHTML == "" {
-		writeError(w, http.StatusBadRequest, "title, subject, recipient, and bodyHtml are required")
+	if in.Title == "" || in.Subject == "" || in.BodyHTML == "" {
+		writeError(w, http.StatusBadRequest, "title, subject, and bodyHtml are required")
 		return
 	}
 	id, err := s.store.CreateNewsletter(in)
@@ -336,8 +336,8 @@ func (s *Server) handleUpdateNewsletter(w http.ResponseWriter, r *http.Request) 
 	if !readJSON(w, r, &in) {
 		return
 	}
-	if in.Title == "" || in.Subject == "" || in.Recipient == "" || in.BodyHTML == "" {
-		writeError(w, http.StatusBadRequest, "title, subject, recipient, and bodyHtml are required")
+	if in.Title == "" || in.Subject == "" || in.BodyHTML == "" {
+		writeError(w, http.StatusBadRequest, "title, subject, and bodyHtml are required")
 		return
 	}
 	in.ID = id
