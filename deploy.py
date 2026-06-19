@@ -23,7 +23,7 @@ else:
     
     # Run git pull
     print("Running git pull...")
-    stdin, stdout, stderr = ssh.exec_command(f'cd {project_dir} && git remote prune origin && git gc && git pull')
+    stdin, stdout, stderr = ssh.exec_command(f'cd {project_dir} && git fetch --all && git reset --hard origin/main && git clean -fd')
     print("Git output:", stdout.read().decode())
     print("Git err:", stderr.read().decode())
 
