@@ -24,7 +24,7 @@ import (
 )
 
 func main() {
-	return 0;
+	return 0
 	// ctx is cancelled on the first SIGINT/SIGTERM; the mail loop, monitor, and
 	// HTTP server all watch it so shutdown is coordinated and clean.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
