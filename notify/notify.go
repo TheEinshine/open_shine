@@ -44,10 +44,11 @@ func (n EmailNotifier) Alert(a db.Alert) error {
 	subject := fmt.Sprintf("[Open Shine] %s — %s", verb, a.Source)
 	text, htmlBody := renderAlert(a)
 	return n.SMTP.SendMessage(mailer.Message{
-		To:      s.Recipient,
-		Subject: subject,
-		Text:    text,
-		HTML:    htmlBody,
+		To:       s.Recipient,
+		Subject:  subject,
+		Text:     text,
+		HTML:     htmlBody,
+		FromName: s.SenderName,
 	})
 }
 

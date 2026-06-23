@@ -55,10 +55,11 @@ func LoadConfig() (Config, error) {
 // Message is one outbound email. When HTML is non-empty the message is sent as
 // multipart/alternative (plain text + HTML); otherwise it is plain text only.
 type Message struct {
-	To      string
-	Subject string
-	Text    string
-	HTML    string
+	To       string
+	Subject  string
+	Text     string
+	HTML     string
+	FromName string
 }
 
 // Send delivers a plain-text email. Kept for callers that don't need HTML.
@@ -81,7 +82,11 @@ func (c Config) SendMessage(m Message) error {
 
 func (c Config) build(m Message) ([]byte, error) {
 	var b strings.Builder
-	b.WriteString("From: " + sanitizeHeader(c.From) + "\r\n")
+	from := c.From
+	if m.FromName != "" {
+		from = fmt.Sprintf("\"%s\" <%s>", m.FromName, c.From)
+	}
+	b.WriteString("From: " + sanitizeHeader(from) + "\r\n")
 	b.WriteString("To: " + sanitizeHeader(m.To) + "\r\n")
 	b.WriteString("Subject: " + sanitizeHeader(m.Subject) + "\r\n")
 	b.WriteString("MIME-Version: 1.0\r\n")

@@ -182,10 +182,11 @@ func sendHeartbeat(ctx context.Context, store *db.Store, smtpCfg mailer.Config, 
 		subject = "Open Shine heartbeat"
 	}
 	msg := mailer.Message{
-		To:      s.Recipient,
-		Subject: subject,
-		Text:    report.RenderText(stats, logs),
-		HTML:    report.RenderHTML(stats, logs),
+		To:       s.Recipient,
+		Subject:  subject,
+		Text:     report.RenderText(stats, logs),
+		HTML:     report.RenderHTML(stats, logs),
+		FromName: s.SenderName,
 	}
 
 	if err := sendWithRetry(ctx, smtpCfg, msg, sendAttempts); err != nil {

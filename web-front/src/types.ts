@@ -35,6 +35,7 @@ export interface MailSettings {
   recipient: string;
   intervalMins: number;
   subject: string;
+  senderName: string;
   enabled: boolean;
 }
 

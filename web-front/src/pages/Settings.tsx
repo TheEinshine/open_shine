@@ -74,6 +74,10 @@ function MailSection({ onError, onOk, clearError }: SectionProps) {
           <input value={s.subject} onChange={(e) => setS({ ...s, subject: e.target.value })} />
         </label>
         <label className="field">
+          <span>Sender Name</span>
+          <input value={s.senderName} onChange={(e) => setS({ ...s, senderName: e.target.value })} />
+        </label>
+        <label className="field">
           <span>Interval (minutes)</span>
           <input
             type="number"

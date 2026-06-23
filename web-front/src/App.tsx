@@ -7,6 +7,7 @@ import { Logs } from "./pages/Logs";
 import { Settings } from "./pages/Settings";
 import { Newsletters } from "./pages/Newsletters";
 import { Subscribers } from "./pages/Subscribers";
+import { Users } from "./pages/Users";
 import type { ReactElement } from "react";
 
 function Guard({ children }: { children: ReactElement }) {
@@ -36,6 +37,7 @@ function Routed() {
         <Route path="/logs" element={<Logs />} />
         <Route path="/newsletters" element={<Newsletters />} />
         <Route path="/subscribers" element={<Subscribers />} />
+        <Route path="/users" element={<Users />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

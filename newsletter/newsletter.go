@@ -40,6 +40,9 @@ func processDue(store *db.Store, smtp mailer.Config) {
 		return
 	}
 
+	settings, _ := store.GetSettings()
+	senderName := settings.SenderName
+
 	subscribers, err := store.ActiveSubscribers()
 	if err != nil {
 		log.Printf("newsletter: could not query active subscribers: %v", err)
@@ -55,10 +58,11 @@ func processDue(store *db.Store, smtp mailer.Config) {
 		var errs []string
 		for _, sub := range subscribers {
 			msg := mailer.Message{
-				To:      sub.Email,
-				Subject: nl.Subject,
-				HTML:    WrapHTML(nl.BodyHTML),
-				Text:    nl.BodyText,
+				To:       sub.Email,
+				Subject:  nl.Subject,
+				HTML:     WrapHTML(nl.BodyHTML),
+				Text:     nl.BodyText,
+				FromName: senderName,
 			}
 			if err := smtp.SendMessage(msg); err != nil {
 				log.Printf("newsletter: failed to send #%d to %s: %v", nl.ID, sub.Email, err)
@@ -93,13 +97,17 @@ func SendNow(store *db.Store, smtp mailer.Config, id int) error {
 		return nil
 	}
 
+	settings, _ := store.GetSettings()
+	senderName := settings.SenderName
+
 	var errs []string
 	for _, sub := range subscribers {
 		msg := mailer.Message{
-			To:      sub.Email,
-			Subject: nl.Subject,
-			HTML:    nl.BodyHTML,
-			Text:    nl.BodyText,
+			To:       sub.Email,
+			Subject:  nl.Subject,
+			HTML:     nl.BodyHTML,
+			Text:     nl.BodyText,
+			FromName: senderName,
 		}
 		if err := smtp.SendMessage(msg); err != nil {
 			errs = append(errs, err.Error())

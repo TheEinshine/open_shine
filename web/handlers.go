@@ -13,7 +13,26 @@ import (
 )
 
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	out := map[string]interface{}{"status": "ok"}
+	
+	if logs, err := s.store.RecentLogs(1); err == nil && len(logs) > 0 {
+		out["lastHeartbeat"] = map[string]interface{}{
+			"sentAt": logs[0].SentAt,
+			"status": logs[0].Status,
+			"error":  logs[0].Error,
+		}
+	}
+	
+	if alerts, err := s.store.RecentAlerts(1); err == nil && len(alerts) > 0 {
+		out["lastAlert"] = map[string]interface{}{
+			"ts":      alerts[0].TS,
+			"source":  alerts[0].Source,
+			"state":   alerts[0].State,
+			"message": alerts[0].Message,
+		}
+	}
+
+	writeJSON(w, http.StatusOK, out)
 }
 
 // ---- auth ----
@@ -377,6 +396,93 @@ func (s *Server) handleSendNewsletter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+}
+
+// ---- users ----
+
+func (s *Server) handleGetUsers(w http.ResponseWriter, r *http.Request) {
+	users, err := s.store.GetUsers()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not query users")
+		return
+	}
+	if users == nil {
+		users = []db.User{}
+	}
+	writeJSON(w, http.StatusOK, users)
+}
+
+func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name     string `json:"name"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if !readJSON(w, r, &in) {
+		return
+	}
+	if in.Name == "" || in.Email == "" || len(in.Password) < 8 {
+		writeError(w, http.StatusBadRequest, "name, email, and strong password (min 8 chars) required")
+		return
+	}
+	hashed, err := auth.Hash(in.Password)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not hash password")
+		return
+	}
+	id, err := s.store.CreateUser(in.Name, in.Email, hashed)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not create user")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]int{"id": id})
+}
+
+func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		Name     string `json:"name"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if !readJSON(w, r, &in) {
+		return
+	}
+	if in.Name == "" || in.Email == "" {
+		writeError(w, http.StatusBadRequest, "name and email required")
+		return
+	}
+	if err := s.store.UpdateUser(id, in.Name, in.Email); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not update user")
+		return
+	}
+	if in.Password != "" {
+		hashed, err := auth.Hash(in.Password)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "could not hash password")
+			return
+		}
+		if err := s.store.SetPassword(in.Email, hashed); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not update password")
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	if err := s.store.DeleteUser(id); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not delete user")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // ---- helpers ----

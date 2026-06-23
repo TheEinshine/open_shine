@@ -25,6 +25,9 @@ export function Layout() {
         <NavLink to="/subscribers" className="nav-link">
           <span>Subscribers</span>
         </NavLink>
+        <NavLink to="/users" className="nav-link">
+          <span>Users</span>
+        </NavLink>
         <div className="spacer" />
         <div className="who">{user?.email}</div>
         <button className="ghost" onClick={() => logout()}>

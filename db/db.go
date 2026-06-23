@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -14,6 +15,7 @@ type Settings struct {
 	Recipient    string `json:"recipient"`
 	IntervalMins int    `json:"intervalMins"`
 	Subject      string `json:"subject"`
+	SenderName   string `json:"senderName"`
 	Enabled      bool   `json:"enabled"`
 }
 
@@ -71,6 +73,7 @@ var migrations = []string{
   recipient     VARCHAR(255) NOT NULL,
   interval_mins INT NOT NULL DEFAULT 1,
   subject       VARCHAR(255) NOT NULL DEFAULT 'Open Shine heartbeat',
+  sender_name   VARCHAR(255) NOT NULL DEFAULT 'Open Shine',
   enabled       BOOLEAN NOT NULL DEFAULT TRUE
 )`,
 	`CREATE TABLE IF NOT EXISTS mail_log (
@@ -156,6 +159,13 @@ func (s *Store) Migrate() error {
 			return fmt.Errorf("migration %d failed: %w", i, err)
 		}
 	}
+	
+	// Add sender_name column safely
+	_, err := s.db.Exec("ALTER TABLE mail_settings ADD COLUMN sender_name VARCHAR(255) NOT NULL DEFAULT 'Open Shine'")
+	if err != nil && !strings.Contains(err.Error(), "Duplicate column name") {
+		return fmt.Errorf("migration sender_name failed: %w", err)
+	}
+
 	return nil
 }
 
@@ -178,16 +188,16 @@ func (s *Store) Seed(defaultRecipient string) error {
 func (s *Store) GetSettings() (Settings, error) {
 	var out Settings
 	err := s.db.QueryRow(
-		`SELECT recipient, interval_mins, subject, enabled FROM mail_settings WHERE id = 1`,
-	).Scan(&out.Recipient, &out.IntervalMins, &out.Subject, &out.Enabled)
+		`SELECT recipient, interval_mins, subject, sender_name, enabled FROM mail_settings WHERE id = 1`,
+	).Scan(&out.Recipient, &out.IntervalMins, &out.Subject, &out.SenderName, &out.Enabled)
 	return out, err
 }
 
 // UpdateSettings overwrites the single mail_settings row (id = 1).
 func (s *Store) UpdateSettings(in Settings) error {
 	_, err := s.db.Exec(
-		`UPDATE mail_settings SET recipient = ?, interval_mins = ?, subject = ?, enabled = ? WHERE id = 1`,
-		in.Recipient, in.IntervalMins, in.Subject, in.Enabled,
+		`UPDATE mail_settings SET recipient = ?, interval_mins = ?, subject = ?, sender_name = ?, enabled = ? WHERE id = 1`,
+		in.Recipient, in.IntervalMins, in.Subject, in.SenderName, in.Enabled,
 	)
 	return err
 }

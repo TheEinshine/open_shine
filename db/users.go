@@ -62,3 +62,34 @@ func (s *Store) scanUser(row *sql.Row) (User, error) {
 	err := row.Scan(&u.ID, &u.Name, &u.Email, &u.PasswordHash, &u.CreatedAt)
 	return u, err
 }
+
+// GetUsers returns all admin accounts.
+func (s *Store) GetUsers() ([]User, error) {
+	rows, err := s.db.Query(`SELECT id, name, email, created_at FROM users ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Name, &u.Email, &u.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// UpdateUser updates an existing user's name and email.
+func (s *Store) UpdateUser(id int, name, email string) error {
+	_, err := s.db.Exec(`UPDATE users SET name = ?, email = ? WHERE id = ?`, name, email, id)
+	return err
+}
+
+// DeleteUser removes an account by id.
+func (s *Store) DeleteUser(id int) error {
+	_, err := s.db.Exec(`DELETE FROM users WHERE id = ?`, id)
+	return err
+}
