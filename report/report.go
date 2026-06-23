@@ -146,6 +146,19 @@ func RenderHTML(s sysstat.Stats, logs []db.LogEntry) string {
 	}))
 	b.WriteString(`</td></tr>`)
 
+	// Environment section.
+	b.WriteString(`<tr><td style="padding:16px 32px 8px 32px;">`)
+	fmt.Fprintf(&b, `<div style="font-family:%s;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:%s;margin-bottom:12px;">Environment</div>`, fontSans, colMuted)
+	internetStatus := "Offline"
+	if s.InternetUp {
+		internetStatus = fmt.Sprintf("Online (%s)", s.InternetLatency.Round(time.Millisecond))
+	}
+	b.WriteString(infoTable([]infoRow{
+		{label: "Latest Commit", value: s.LatestCommit},
+		{label: "Internet Status", value: internetStatus},
+	}))
+	b.WriteString(`</td></tr>`)
+
 	// Log history section.
 	logTitle := "Recent Activity"
 	if len(logs) > 0 {
@@ -360,6 +373,16 @@ func RenderText(s sysstat.Stats, logs []db.LogEntry) string {
 	fmt.Fprintf(&b, "  %-16s %d\n", "Goroutines", s.Goroutines)
 	fmt.Fprintf(&b, "  %-16s %s\n", "Heap Allocated", humanBytes(s.HeapAlloc))
 	fmt.Fprintf(&b, "  %-16s %s\n", "Hostname", host)
+
+	b.WriteString("\n───────────────────────────────────────────────────\n")
+	b.WriteString("  ENVIRONMENT\n")
+	b.WriteString("───────────────────────────────────────────────────\n")
+	internetStatus := "Offline"
+	if s.InternetUp {
+		internetStatus = fmt.Sprintf("Online (%s)", s.InternetLatency.Round(time.Millisecond))
+	}
+	fmt.Fprintf(&b, "  %-16s %s\n", "Latest Commit", s.LatestCommit)
+	fmt.Fprintf(&b, "  %-16s %s\n", "Internet Status", internetStatus)
 
 	b.WriteString("\n───────────────────────────────────────────────────\n")
 	if len(logs) == 0 {

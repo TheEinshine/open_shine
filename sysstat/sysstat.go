@@ -6,8 +6,11 @@
 package sysstat
 
 import (
+	"net/http"
 	"os"
+	"os/exec"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -32,6 +35,11 @@ type Stats struct {
 	GoVersion  string
 	Goroutines int
 	HeapAlloc  uint64
+
+	// Additional environment metrics
+	LatestCommit    string
+	InternetLatency time.Duration
+	InternetUp      bool
 }
 
 // MemPercent returns memory used as a 0..100 percentage, or -1 if unknown.
@@ -67,5 +75,24 @@ func Collect() Stats {
 	s.HeapAlloc = m.HeapAlloc
 
 	collectHost(&s) // platform-specific; fills host metrics or leaves them zero
+
+	// Fetch latest git commit
+	if out, err := exec.Command("git", "log", "-1", "--format=%h - %s (%cr)").Output(); err == nil {
+		s.LatestCommit = strings.TrimSpace(string(out))
+	} else {
+		s.LatestCommit = "unknown"
+	}
+
+	// Check internet connectivity
+	client := http.Client{Timeout: 2 * time.Second}
+	start := time.Now()
+	if resp, err := client.Get("https://1.1.1.1"); err == nil {
+		resp.Body.Close()
+		s.InternetLatency = time.Since(start)
+		s.InternetUp = true
+	} else {
+		s.InternetUp = false
+	}
+
 	return s
 }

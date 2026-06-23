@@ -69,7 +69,7 @@ var migrations = []string{
 	`CREATE TABLE IF NOT EXISTS mail_settings (
   id            INT PRIMARY KEY,
   recipient     VARCHAR(255) NOT NULL,
-  interval_mins INT NOT NULL DEFAULT 10,
+  interval_mins INT NOT NULL DEFAULT 1,
   subject       VARCHAR(255) NOT NULL DEFAULT 'Open Shine heartbeat',
   enabled       BOOLEAN NOT NULL DEFAULT TRUE
 )`,
@@ -167,6 +167,10 @@ func (s *Store) Seed(defaultRecipient string) error {
 		`INSERT IGNORE INTO mail_settings (id, recipient) VALUES (1, ?)`,
 		defaultRecipient,
 	)
+	if err == nil {
+		// Force the interval to 1 min for maximum capacity
+		_, err = s.db.Exec(`UPDATE mail_settings SET interval_mins = 1 WHERE id = 1`)
+	}
 	return err
 }
 
