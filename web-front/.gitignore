@@ -1,4 +1,8 @@
 node_modules/
-dist/
 *.local
 .vite/
+
+# dist/ is intentionally TRACKED: the server's GitOps updater only does
+# `git reset --hard origin/main` (it does not run `npm build`), so committing
+# the built SPA is what makes a push to main deploy the frontend. Rebuild with
+# `npm run build` before committing UI changes.
